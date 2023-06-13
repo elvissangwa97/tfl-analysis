@@ -1,0 +1,468 @@
+---
+title: "London Public Transport Analysis"
+author: "Elvis Sangwa"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE,echo = TRUE, fig.width=9)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(tidyr)
+```
+
+Many people think that the London Underground is the busiest mode of transit in the city. The majority of public studies have therefore ignored all other modes of transportation. 
+
+This study will make use of a data set created by Transport for London and updated regularly by Opinion Research and to General Statistics (GLA). 
+
+The data set is very small, and it was cleaned and divided into roughly monthly collecting periods that started at the beginning of April 2010 and ended in December 2022. This data set is updated each month.
+
+For this report, we will go with a most visual approach to help highlight the trends that may not be seen numerically as well as help when comparing the different modes of public transport across the years.  
+
+### Pre-Processing the Data
+
+This first chapter will describe the pre-processing that was carried out on the data before it was analysed.
+
+First we are going to download the data and keep the columns of interest.
+```{r gen_data}
+file_url <- "https://data.london.gov.uk/download/public-transport-journeys-type-transport/06a805f6-77c6-481a-8b08-ddef56afffdd/tfl-journeys-type.csv"
+raw.data <- read.csv(url(file_url))
+df.tfldata <- raw.data[,c(5:12)]
+str(df.tfldata)
+```
+The data frame was then formatted for ease of referencing throughout the report.
+```{r format_data}
+#setting the names of the columns
+names(df.tfldata) <- c("period.ending", "bus.journeys", 
+                       "underground.journeys", "dlr.journeys", 
+                       "tram.jouneys", "overground.journeys", 
+                       "ea.journeys", "tfl.rail.journeys")
+
+#changing period.ending column to date format
+df.tfldata$period.ending <- as.Date(df.tfldata$period.ending,"%d-%h-%y")
+str(df.tfldata)
+```
+If you compare the structures before and after the formatting, the column "Year" was added for some grouping which will be explained later in the report.
+
+### Basic Summary of Dataset
+
+To gain a bit of insight into the data set and to further confirm that the dataset was imported and formatted into a usable form, we can use the Summary() function to give us an overview of the data before we go deeper into that main dataset from which we will derive our subsets later on.
+```{r gen_summary}
+#view generalsummary of data
+summary(df.tfldata)
+```
+The code chunk below formats the main data set further to make visualizations easier to generate and to allow ease in grouping further down in the report. 
+```{r segr_data}
+#creating a data frame to store the data of the top 2 modes of public transport only
+df.tfldata.top2<- data.frame(gather(df.tfldata[,c(1:3)],
+                                    journey_type,journeys, 
+                                    bus.journeys, 
+                                    underground.journeys))
+
+#naming the columns
+names(df.tfldata.top2) <- c("Period Ending","Journey Type", "Journeys(m)")
+
+#creating a data frame to store the data of the other modes of public transport
+df.tfldata.rest<- data.frame(gather(df.tfldata[,c(1,4:8)],
+                                    journey_type, journeys, 
+                                    dlr.journeys, 
+                                    tram.jouneys, 
+                                    overground.journeys, 
+                                    ea.journeys, 
+                                    tfl.rail.journeys))
+
+#naming the columns
+names(df.tfldata.rest) <- c("Period Ending","Journey Type", "Journeys(m)")
+```
+
+The variables/column descriptions are as follows:  
+a\) **Period Ending**: This is the date where the count for that monthly ends. The number of journeys counted resets after this date.  
+b\) **Journey Type**: These are the different modes of public transprot available in London.  
+c\) **Journeys (m)**: This is the number of times a mode of transport was used within the counting period. The unit for this column is in Millions.  
+
+```{r gen_data_frmt}
+#converting the data type of Journey Type in the 2 data frames into Factor with the relevant levels
+df.tfldata.top2$`Journey Type`<- factor(df.tfldata.top2$`Journey Type`,
+                                   levels = c("bus.journeys","underground.journeys"),
+                                   labels = c("Bus Journeys","Underground Journeys"))
+
+df.tfldata.rest$`Journey Type`<- factor(df.tfldata.rest$`Journey Type`,
+                                   levels = c("dlr.journeys", 
+                                              "tram.jouneys", 
+                                              "overground.journeys", 
+                                              "ea.journeys", 
+                                              "tfl.rail.journeys"),
+                                   labels = c("DLR Journeys", 
+                                              "Tram Jouneys", 
+                                              "Overground Journeys", 
+                                              "Emirates Airlines Cable Car Journeys", 
+                                              "TfL Rail Journeys"))
+```
+The creation of the 2 subsets will be explained in the next chapter.
+
+A column called Year is added to simplify the grouping process later in the report.
+```{r year_clm}
+df.tfldata.top2$Year <- as.numeric(format(df.tfldata.top2$`Period Ending`, format = "%Y"))
+df.tfldata.rest$Year <- as.numeric(format(df.tfldata.rest$`Period Ending`, format = "%Y"))
+```
+All the data is now in a more usable format and can now be analysed.
+  
+### Most Frequently Used Mode of Public Transport
+
+To give us a general understanding of which is the most used public transport system, we can plot a line graph. This will also help in picking out any major trends with the use of any mode of transport.
+
+```{r gen_plot}
+#plotting the top 2 modes of transport journeys
+plot.journeys_cnt1 <- ggplot(data = df.tfldata.top2,aes(x = df.tfldata.top2$`Period Ending`, y = df.tfldata.top2$`Journeys(m)`, color = `Journey Type`)) + geom_line() + theme_minimal() + theme_update(plot.title = element_text(hjust = 0.5))+
+  xlab("Year") +
+  ylab("Journeys (m)") +
+  ggtitle("Bus and Underground Journeys")
+
+#plotting the other modes of transport journeys
+plot.journeys_cnt2 <- ggplot(data = df.tfldata.rest,aes(x = df.tfldata.rest$`Period Ending`, 
+                                                        y = df.tfldata.rest$`Journeys(m)`, 
+                                                        color = `Journey Type`)) + 
+                      geom_line() + 
+                      theme_minimal() + 
+                      theme_update(plot.title = element_text(hjust = 0.5)) +
+                      xlab("Year") +
+                      ylab("Journeys (m)") +
+                      ggtitle("Overground, TfL Rail, DLR, Tram,\n and Emirates Cable Car Journeys")
+
+#arranging them in a grid
+grid.arrange(plot.journeys_cnt1,
+plot.journeys_cnt2,
+nrow = 2)
+```
+As we stated in the beginning, the Underground is widely thought to be the most used transport but from he plot above, we see that this isn't the case. The most used public transport system in London is clearly the Bus, with the Underground being the second most used.
+
+An interesting insight that should be highlighted is the sudden rise in TfL Rail Journeys after the large dip. The cause of this dip will be investigated later on in the report.
+
+An additional insight that can be seen is that Overground quickly became the 3rd most popular mode of transport after a short period of time but was just overtaken after the most recent journey count by TfL Rail.
+
+The difference between the top 2 used transport systems and the rest of the transport systems in London is significantly large. This difference required the plots to be segregated in order to view the trends in the other 5 modes of transport.
+
+### Average Number of Journeys per Year for each Mode of Public Transport
+
+To help us understand the usage of each mode of transport, we can compare the arithmetic mean of each mode of transport.
+```{r}
+#creating data frame to store the yearly averages for the top 2 modes of transport
+df.annual_avg_1 <- aggregate(df.tfldata.top2$`Journeys(m)`, 
+                             by=list(df.tfldata.top2$`Journey Type`,
+                                     df.tfldata.top2$Year), 
+                             FUN=mean)
+names(df.annual_avg_1) <- c("Journey Type","Year","Average Yearly Journies(m)")
+
+
+#creating data frame to store the yearly averages for the other modes of transport
+df.annual_avg_2 <- aggregate(df.tfldata.rest$`Journeys(m)`, 
+                             by=list(df.tfldata.rest$`Journey Type`,
+                                     df.tfldata.rest$Year), 
+                             FUN=mean)
+names(df.annual_avg_2) <- c("Journey Type","Year","Average Yearly Journies(m)")
+```
+
+We will plot a bar chart to help see the difference in magnitude over the years and will help emphasize the changes between years.
+```{r plot_yr_average}
+plot.annual_jrn_1 <- ggplot(df.annual_avg_1,aes(x = df.annual_avg_1$Year, 
+                                                y = df.annual_avg_1$`Average Yearly Journeys(m)`, 
+                                                fill = `Journey Type`)) +
+                      geom_col(aes(y=df.annual_avg_1$`Average Yearly Journies(m)`),
+                               position = 'dodge') +
+                      xlab("Year") +
+                      ylab("Mean number of Journeys (m)")
+
+plot.annual_jrn_2 <- ggplot(df.annual_avg_2,aes(x = df.annual_avg_2$Year, 
+                                                y = df.annual_avg_2$`Average Yearly Journeys(m)`, 
+                                                fill = `Journey Type`)) +
+                      geom_col(aes(y=df.annual_avg_2$`Average Yearly Journies(m)`),
+                               position = 'dodge') +
+                      xlab("Year") +
+                      ylab("Mean number of Journeys (m)")
+
+title.annual_avg <- textGrob("Average Journeys per Year of Each Mode of Transport", 
+                        x=unit(0.5, "npc"), y=unit(0.9, "npc"), 
+                        just=c("center", "top"), 
+                        gp=gpar(fontsize=12))
+grid.arrange(arrangeGrob(plot.annual_jrn_1, plot.annual_jrn_2, ncol=2), top=title.annual_avg)
+```
+
+The average trends are similar as the general line plot above showing a considerable difference between the top 2 modes of public transport.
+
+The averages of the other 5 modes of public transport show Overground quickly rise but not Tfl Rail's rise in the last few months. This could suggest that the increase in TfL journeys was in a very short time span and could lead to overcrowding if the rail does not increase its capacity soon.
+
+### Corrolations to any External Factors
+
+First we try to see if the temperature of London has any affects to whether people using public means of transport. We will compare the line graphs to help see if the seasonal changes are similar.
+
+First we pick a random year. For this example we will use 2018. Years after 2015 are preferable as the latest mode of public transport, the TfL Rail was started around 31 May 2015.
+```{r gen_corrolation_to_tmp_data}
+#set variable to specify the 
+vr.year <- 2018
+
+#get data within a certain year
+df.sp_year_journeys.top2 <- data.frame(subset(df.tfldata.top2, df.tfldata.top2$Year == vr.year))
+df.sp_year_journeys.rest <- data.frame(subset(df.tfldata.rest, df.tfldata.rest$Year == vr.year))
+```
+
+We then get daily temperature data from a reliable source. This data source was found on Kaggle. The Kaggle user cleaned data it sourced from the European Climate Assessment & Dataset website. I downloaded the data set and kept the following variables:  
+a\) **date**: This was the date the reading was taken.  
+b\) **mean_temp**: This is the average temperature on the given day.  
+
+```{r adpt_temp_data}
+# Data Source: https://www.kaggle.com/datasets/emmanuelfwerr/london-weather-data
+#retrieve the data
+df.tempdata_adpt <- read.csv("tempdata.csv",fileEncoding="latin1")
+
+#format the date
+df.tempdata_adpt$date <- as.Date(df.tempdata_adpt$date,"%d-%m-%Y")
+
+#omit any NA values
+df.tempdata_adpt <- na.omit(df.tempdata_adpt)
+
+#matches the temperature dates to the min and max dates of the 2 data sets
+df.tempdata_adpt <- data.frame(subset(df.tempdata_adpt, 
+                                      df.tempdata_adpt$date <= 
+                                        max(df.sp_year_journeys.rest$Period.Ending)
+                                      & df.tempdata_adpt$date >= 
+                                        min(df.sp_year_journeys.rest$Period.Ending)))
+str(df.tempdata_adpt)
+```
+
+```{r corrolation_to_temp_plot}
+#plot the 2 graphs with temperature at the bottom for comparison
+
+tfl.gen.dataplot3 <- ggplot(df.sp_year_journeys.top2,
+                            aes(x = df.sp_year_journeys.top2$Period.Ending, 
+                                y = df.sp_year_journeys.top2$Journeys.m., 
+                                color = Journey.Type)) + 
+                     geom_line() + 
+                     theme(legend.position = "bottom") + 
+                     labs(x = "Date", y="Journeys (m)")
+
+tfl.gen.dataplot4 <- ggplot(data = df.sp_year_journeys.rest,
+                            aes(x = df.sp_year_journeys.rest$Period.Ending, 
+                                y = df.sp_year_journeys.rest$Journeys.m., 
+                                color = Journey.Type)) + 
+                     geom_line() + 
+                     theme(legend.position="bottom") + 
+                     labs(x = "Date", y="Journeys (m)")
+
+temp.plot <- ggplot(data = df.tempdata_adpt,aes(x=date,y=mean_temp)) + 
+              labs(x = "Date", y="Temperature (C)") + geom_line()
+
+title.temp <- textGrob("Comparison of Number of Journeys and Temperature for a Given Year", 
+                        x=unit(0.5, "npc"), y=unit(0.9, "npc"), 
+                        just=c("center", "top"), 
+                        gp=gpar(fontsize=12))
+grid.arrange(arrangeGrob(tfl.gen.dataplot3,tfl.gen.dataplot4,temp.plot, nrow = 3, heights = c(4,4,3)), top=title.temp)
+
+```
+From the comparison of the temperature data and the journey counts of each mode of transport, we cannot see any significant correlation between the two. There is no significant seasonal dips to suggest a change due to weather seasons.
+
+Next we will see the impact COVID-19 had on the usage of public transport in London. A personal assumption is that the pandemic caused the sudden drop that has been seen in previous graphs.
+```{r corrltion_to_covid_lkd_plot}
+#adding covid reference lines to first line graphs
+corona.lockdown.cmp.1 <- plot.journeys_cnt1 + 
+                        geom_vline(xintercept = as.Date("23/03/2020","%d/%m/%Y")) + 
+                        geom_text(aes(x=as.Date("23/03/2020","%d/%m/%Y"), 
+                                      label="first lockdown", 
+                                      y=140), 
+                                  colour="black", 
+                                  angle=90, 
+                                  vjust = 1, 
+                                  text=element_text(size=1)) + 
+                        geom_vline(xintercept = as.Date("19/07/2021","%d/%m/%Y")) + 
+                        geom_text(aes(x=as.Date("19/07/2021","%d/%m/%Y"), 
+                                      label="end of restrictions", 
+                                      y=125), 
+                                  colour="black", 
+                                  angle=90, 
+                                  vjust = 1, 
+                                  text=element_text(size=1))
+
+corona.lockdown.cmp.2 <- plot.journeys_cnt2 + 
+                        geom_vline(xintercept = as.Date("23/03/2020","%d/%m/%Y")) + 
+                        geom_text(aes(x=as.Date("23/03/2020","%d/%m/%Y"), 
+                                      label="first lockdown", y=10), 
+                                  colour="black", 
+                                  angle=90, 
+                                  vjust = 1, 
+                                  text=element_text(size=4)) + 
+                        geom_vline(xintercept = as.Date("19/07/2021","%d/%m/%Y")) + 
+                        geom_text(aes(x=as.Date("19/07/2021","%d/%m/%Y"), 
+                                      label="end of restrictions", 
+                                      y=9), colour="black", 
+                                  angle=90, 
+                                  vjust = 1, 
+                                  text=element_text(size=1))
+
+#plotting the first line graphs with the reference lines
+title.covid <- textGrob("COVID-19 Pandemic Effects on Londons Transport", 
+                        x=unit(0.5, "npc"), y=unit(0.9, "npc"), 
+                        just=c("center", "top"), 
+                        gp=gpar(fontsize=12))
+grid.arrange(arrangeGrob(corona.lockdown.cmp.1,corona.lockdown.cmp.2,nrow = 2), top=title.covid)
+```
+As shown above, we have indicated the date of the first lock down and the date when COVID-19 restrictions ended. We can see  that the graphs satisfy out suggestion as the number of journeys drop and rise significantly around the suggested dates.
+
+Giving strong evidence that COVID-19 affected the transport system. New we will see how much COVID-19 affected the transport system.
+
+We will split the data into 3 categories:  
+a\) **Pre-COVID-19 Pandemic**: This will contain the data before the first lockdown on the 23rd March 2020.  
+b\) **During COVID-19 Pandemic**: This will be data collected between the first lockdown on the 23rd March 2020 and when the COVID-19 Pandemic restrictions were lifted on 19th July 2021.  
+c\) **Post-COVID-19 Pandemic**: This is the data that was collected after the Pandemic restrictions were lifted on 19th July 2021.  
+
+```{r}
+#preparing pre covid averages
+df.tfldata.top2.precovid <- data.frame(subset(df.tfldata.top2, 
+                                              df.tfldata.top2$`Period Ending` < 
+                                                as.Date("23/03/2020","%d/%m/%Y")))
+
+top2.avg.precovid <- aggregate(df.tfldata.top2.precovid$Journeys.m., 
+                               by=list(df.tfldata.top2.precovid$Journey.Type), 
+                               FUN=mean)
+
+df.tfldata.rest.precovid <- na.omit(data.frame(subset(df.tfldata.rest, 
+                                                      df.tfldata.rest$`Period Ending` < 
+                                                        as.Date("23/03/2020","%d/%m/%Y"))))
+
+rest.avg.precovid <- aggregate(df.tfldata.rest.precovid$Journeys.m., 
+                               by=list(df.tfldata.rest.precovid$Journey.Type), 
+                               FUN=mean)
+
+pre.covid.avg <- rbind(top2.avg.precovid, rest.avg.precovid)
+pre.covid.avg$Covid <- "Pre"
+
+#-----------------------------------------
+
+#preparing covid averages
+df.tfldata.top2.covid <- data.frame(subset(df.tfldata.top2, 
+                                           df.tfldata.top2$`Period Ending`>= 
+                                             as.Date("23/03/2020","%d/%m/%Y") & 
+                                             df.tfldata.top2$`Period Ending`<= 
+                                             as.Date("19/07/2021","%d/%m/%Y")))
+
+top2.avg.covid <- aggregate(df.tfldata.top2.covid$Journeys.m., 
+                            by=list(df.tfldata.top2.covid$Journey.Type), 
+                            FUN=mean)
+
+df.tfldata.rest.covid <- data.frame(subset(df.tfldata.rest, 
+                                           df.tfldata.rest$`Period Ending`>= 
+                                             as.Date("23/03/2020","%d/%m/%Y") & 
+                                             df.tfldata.rest$`Period Ending`<= 
+                                             as.Date("19/07/2021","%d/%m/%Y")))
+
+rest.avg.covid <- aggregate(df.tfldata.rest.covid$Journeys.m., 
+                            by=list(df.tfldata.rest.covid$Journey.Type), 
+                            FUN=mean)
+
+covid.avg <- rbind(top2.avg.covid, rest.avg.covid)
+covid.avg$Covid <- "During"
+
+ #----------------------------------------
+
+#preparing post covid averages
+df.tfldata.top2.postcovid <- data.frame(subset(df.tfldata.top2, 
+                                               df.tfldata.top2$`Period Ending` > 
+                                                 as.Date("19/07/2021","%d/%m/%Y")))
+
+top2.avg.postcovid <- aggregate(df.tfldata.top2.postcovid$Journeys.m., 
+                                by=list(df.tfldata.top2.postcovid$Journey.Type), 
+                                FUN=mean)
+
+df.tfldata.rest.postcovid <- na.omit(data.frame(subset(df.tfldata.rest, 
+                                                       df.tfldata.rest$`Period Ending` > 
+                                                         as.Date("19/07/2021","%d/%m/%Y"))))
+
+rest.avg.postcovid <- aggregate(df.tfldata.rest.postcovid$Journeys.m.,
+                                by=list(df.tfldata.rest.postcovid$Journey.Type), 
+                                FUN=mean)
+
+post.covid.avg <- rbind(top2.avg.postcovid, rest.avg.postcovid)
+post.covid.avg$Covid <- "Post"
+
+#---------------------------------
+
+# joining the tables
+effects.covid <- rbind(pre.covid.avg,covid.avg,post.covid.avg)
+names(effects.covid) <- c("Journey Type", "Period Average", "Covid Phase")
+effects.covid$`Covid Phase`<- factor(effects.covid$`Covid Phase`,
+                                   levels = c("Pre", "During", "Post"),
+                                   labels = c("Pre-Covid", "During Covid", "Post Covid"))
+```
+
+
+```{r}
+#plotting the effects
+plot.effects.covid <- ggplot(effects.covid,aes(x = effects.covid$`Covid Phase`, 
+                                               y = effects.covid$`Period Average`, 
+                                               fill = `Journey Type` )) +
+                      geom_col(aes(y=effects.covid$`Period Average`),position = 'dodge') +
+                      theme(axis.text.x = element_text(angle=0)) +
+                      xlab("Year") +
+                      ylab("Mean number of Journeys (m)") + 
+                      ggtitle("Average Number of Journeys Before, During, and After the COVID-19 Pandemic")
+
+plot.effects.covid
+```
+
+The chart above shows how the COVID-19 Pandemic had a massive toll on the transport system as the averages these changes.
+
+Below shows the percentage decrease between before and during the COVID-19 Pandemic:
+
+```{r}
+pre.dur.diff <- as.numeric(format(round(((
+  as.numeric(covid.avg$x)-as.numeric(pre.covid.avg$x))/as.numeric(pre.covid.avg$x))*100, 3), 
+  nsmall = 3))
+pre.dur.diff<- data.frame(pre.dur.diff)
+pre.dur.diff$names.diff <- unique(effects.covid$`Journey Type`)
+pre.dur.diff$change.cause <- "Due to the First COVID-19 Pandemic Lockdown"
+names(pre.dur.diff) <- c("Percentage Change of Average","Journey Type","Cause of Change")
+
+dur.post.diff <- as.numeric(format(round(((
+  as.numeric(post.covid.avg$x)-as.numeric(covid.avg$x))/as.numeric(covid.avg$x))*100, 3), 
+  nsmall = 3))
+dur.post.diff<- data.frame(dur.post.diff)
+dur.post.diff$names.diff <- unique(effects.covid$`Journey Type`)
+dur.post.diff$change.cause <- "End COVID-19 Pandemic Restrictions"
+names(dur.post.diff) <- c("Percentage Change of Average","Journey Type","Cause of Change")
+
+dur.diff <- rbind(dur.post.diff,pre.dur.diff)
+```
+```{r}
+ggplot(dur.diff, aes(x=`Journey Type`, 
+                     y=`Percentage Change of Average`, 
+                     fill=`Cause of Change`)) + 
+  geom_col(position = "dodge") + 
+  ggtitle("Percentage Change of Average Journey Time by Journey Type") + 
+  xlab("Journey Type") + 
+  ylab("Percentage Change of Average") + 
+  scale_fill_manual(values = c("red", "green")) +
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+As shown above, TfL Rail Journeys showed an increase of over 200%. This increase could be due to the Elizabeth line service. This will operate under the TfL Rail brand until Crossrail is completed and the full Elizabeth line service is launched. A surprising insight is that the Emirates Airlines Cable Car also saw a large increase of over 150%. This could be attributed to a large increase of Londoners and Tourists wanting to explore the area from above after being locked down for a very long period of time.
+
+
+### Conclusion
+This information provided us with some crucial and unexpected insights regarding London's public transportation system. We clearly proved that the Underground is, in fact, not the mist used mode of public transport. Instead it is the Bus Service that is the most used mode of public transport, and it has been used significantly more on a consistent basis. It has never dropped below the Underground Service. 
+
+Additionally, we saw the rapid rise in TfL Rail Usage. This insight will help decision makers and relevant stakeholders decide when the capacity of this service will need to be expanded.
+
+The London public transportation system was significantly impacted by the COVID-19 outbreak. Government regulations and health issues caused a significant drop in the number of people utilising public transportation, which had an impact on the system's overall effectiveness and reduced income for the transport companies.
+
+The use of public transportation in London has also been impacted by other causes, such as the increase of remote work, adjustments in travel habits, and a trend toward active commuting (such as walking and cycling). These elements are difficult to quantify, making it difficult to completely comprehend their influence on the public transportation system.
+
+### Suggested Improvements
+This research was additionally constrained due to the monthly data collecting frequency. One proposal for improving this report is using daily journey counts. Since it covers occurrences and movements on a daily basis, daily data allows for a more detailed examination than monthly data. It captures changes and variations that occur within a shorter time frame, resulting in a more accurate picture of trends and patterns. Daily data allows for faster detection and response to changes, but monthly data may miss critical changes that occur throughout the month.
+
+A challenge that was faced was the consistency of the counting periods. The duration of all counting periods was not all the same. If there could be data with the time periods to be consistently the same, as well as more time to complete the report, we could make use of Time Series Analysis and produce models and predict the number of journeys.
+
+A mistake that was made was the creation of too many variables/ data frames. There were other techniques that I personally came across. With more time, I could practice those methods thus making majority of the code more efficient.
+
+If given more time, we could analyse London's Public Transport further by:  
+a\) Finding out which Public Holidays affect the transport system around London the most.  
+b\) Predicting when the current capacity of certain services will be exceeded.  
+c\) Comparing the efficiency of the London Transport System to other major cities in the UK or Europe.
